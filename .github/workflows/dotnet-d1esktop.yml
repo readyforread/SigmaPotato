@@ -1,0 +1,73 @@
+name: Build Patched
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch source (rename everything)
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter *.cs
+          Write-Host "Patching $($files.Count) files"
+          foreach ($f in $files) {
+            $c = Get-Content $f.FullName -Raw
+            $c = $c -replace '(?i)SigmaPotato', 'Updater'
+            $c = $c -replace '(?i)SharpToken', 'CoreHelper'
+            $c = $c -replace '(?i)GodPotato', 'Updater'
+            $c = $c -replace '(?i)EpMapper', 'EpmSvc'
+            $c = $c -replace '\bclass Program\b', 'class UpdaterRunner'
+            Set-Content -Path $f.FullName -Value $c -Encoding UTF8
+          }
+          Write-Host "Patched."
+
+      - name: Compile with Roslyn csc
+        shell: pwsh
+        run: |
+          $csc = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter csc.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch 'Framework' } | Select-Object -First 1
+          Write-Host "Using csc: $($csc.FullName)"
+          $src = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter *.cs | Select-Object -ExpandProperty FullName
+          Write-Host "Found $($src.Count) .cs files"
+          & $csc.FullName /target:exe /out:Updater.exe /platform:anycpu /main:Updater.UpdaterRunner $src
+
+      - name: Verify output
+        shell: pwsh
+        run: |
+          if (Test-Path "Updater.exe") {
+            Get-Item "Updater.exe" | Format-List Name, Length, FullName
+          } else {
+            Write-Error "Build failed"
+            exit 1
+          }
+
+      - name: Check no forbidden strings
+        shell: pwsh
+        run: |
+          $bytes = [System.IO.File]::ReadAllBytes("Updater.exe")
+          $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          $unicode = [System.Text.Encoding]::Unicode.GetString($bytes)
+          $combined = $ascii + $unicode
+          $patterns = @('SigmaPotato', 'GodPotato', 'SharpToken', 'EpMapper')
+          $found = @()
+          foreach ($p in $patterns) {
+            if ($combined -match [regex]::Escape($p)) {
+              $found += $p
+            }
+          }
+          if ($found.Count -gt 0) {
+            Write-Error "Found forbidden strings in binary: $($found -join ', ')"
+            exit 1
+          } else {
+            Write-Host "Clean - no forbidden strings found"
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater
+          path: Updater.exe
