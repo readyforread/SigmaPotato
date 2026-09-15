@@ -22,19 +22,9 @@ jobs:
             $c = $c.Replace('SharpToken', 'CoreHelper')
             $c = $c.Replace('GodPotato', 'Updater')
             $c = $c.Replace('EpMapper', 'EpmSvc')
-            $c = $c.Replace('class Program', 'class UpdaterRunner')
             [System.IO.File]::WriteAllText($f.FullName, $c, [System.Text.Encoding]::UTF8)
           }
           Write-Host "Patched."
-          Write-Host "Verify namespaces:"
-          Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter *.cs | ForEach-Object {
-            $first = (Get-Content $_.FullName -TotalCount 40) -join "`n"
-            if ($first -match 'namespace\s+(\S+)') {
-              Write-Host "$($_.Name): namespace = $($matches[1])"
-            } else {
-              Write-Host "$($_.Name): no namespace found"
-            }
-          }
 
       - name: Compile with Roslyn csc
         shell: pwsh
@@ -43,7 +33,7 @@ jobs:
           Write-Host "Using csc: $($csc.FullName)"
           $src = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter *.cs | Select-Object -ExpandProperty FullName
           Write-Host "Found $($src.Count) .cs files"
-          & $csc.FullName /target:exe /out:Updater.exe /platform:anycpu /main:Updater.UpdaterRunner $src
+          & $csc.FullName /target:exe /out:Updater.exe /platform:anycpu $src
 
       - name: Verify output
         shell: pwsh
