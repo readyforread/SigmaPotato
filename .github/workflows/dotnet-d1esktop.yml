@@ -16,15 +16,25 @@ jobs:
           $files = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter *.cs
           Write-Host "Patching $($files.Count) files"
           foreach ($f in $files) {
-            $c = Get-Content $f.FullName -Raw
-            $c = $c -replace '(?i)SigmaPotato', 'Updater'
-            $c = $c -replace '(?i)SharpToken', 'CoreHelper'
-            $c = $c -replace '(?i)GodPotato', 'Updater'
-            $c = $c -replace '(?i)EpMapper', 'EpmSvc'
-            $c = $c -replace '\bclass Program\b', 'class UpdaterRunner'
-            Set-Content -Path $f.FullName -Value $c -Encoding UTF8
+            Write-Host "Patching: $($f.FullName)"
+            $c = [System.IO.File]::ReadAllText($f.FullName)
+            $c = $c.Replace('SigmaPotato', 'Updater')
+            $c = $c.Replace('SharpToken', 'CoreHelper')
+            $c = $c.Replace('GodPotato', 'Updater')
+            $c = $c.Replace('EpMapper', 'EpmSvc')
+            $c = $c.Replace('class Program', 'class UpdaterRunner')
+            [System.IO.File]::WriteAllText($f.FullName, $c, [System.Text.Encoding]::UTF8)
           }
           Write-Host "Patched."
+          Write-Host "Verify namespaces:"
+          Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter *.cs | ForEach-Object {
+            $first = (Get-Content $_.FullName -TotalCount 40) -join "`n"
+            if ($first -match 'namespace\s+(\S+)') {
+              Write-Host "$($_.Name): namespace = $($matches[1])"
+            } else {
+              Write-Host "$($_.Name): no namespace found"
+            }
+          }
 
       - name: Compile with Roslyn csc
         shell: pwsh
