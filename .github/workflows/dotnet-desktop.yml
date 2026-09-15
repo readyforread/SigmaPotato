@@ -1,0 +1,77 @@
+name: Build Obfuscated
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile with Roslyn csc
+        shell: pwsh
+        run: |
+          $csc = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter csc.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch 'Framework' } | Select-Object -First 1
+          Write-Host "Using csc: $($csc.FullName)"
+          $src = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter *.cs | Select-Object -ExpandProperty FullName
+          Write-Host "Found $($src.Count) .cs files:"
+          $src | ForEach-Object { Write-Host $_ }
+          & $csc.FullName /target:exe /out:SigmaPotato.exe $src
+
+      - name: Verify SigmaPotato.exe
+        shell: pwsh
+        run: |
+          if (Test-Path "SigmaPotato.exe") {
+            Get-Item "SigmaPotato.exe" | Format-List Name, Length, FullName
+          } else {
+            Write-Error "SigmaPotato.exe not built"
+            exit 1
+          }
+
+      - name: Download ConfuserEx CLI
+        shell: pwsh
+        run: |
+          iwr -Uri "https://github.com/mkaring/ConfuserEx/releases/download/v1.6.0/ConfuserEx-CLI.zip" -OutFile ConfuserEx.zip
+          Expand-Archive ConfuserEx.zip -DestinationPath ConfuserEx -Force
+
+      - name: Create Confuser project
+        shell: pwsh
+        run: |
+          @"
+          <project outputDir="Confused" baseDir="." xmlns="http://confuser.codeplex.com">
+            <rule pattern="true" preset="maximum" inherit="false">
+              <protection id="anti debug" />
+              <protection id="anti dump" />
+              <protection id="anti ildasm" />
+              <protection id="anti tamper" />
+              <protection id="constants" />
+              <protection id="ctrl flow" />
+              <protection id="ref proxy" />
+              <protection id="rename" />
+            </rule>
+            <module path="SigmaPotato.exe" />
+          </project>
+          "@ | Out-File -Encoding UTF8 confuser.crproj
+
+      - name: Obfuscate
+        shell: pwsh
+        run: |
+          .\ConfuserEx\Confuser.CLI.exe -n confuser.crproj
+
+      - name: Verify obfuscated
+        shell: pwsh
+        run: |
+          if (Test-Path "Confused\SigmaPotato.exe") {
+            Get-Item "Confused\SigmaPotato.exe" | Format-List Name, Length, FullName
+          } else {
+            Write-Error "Obfuscated SigmaPotato.exe not found"
+            exit 1
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sp-obfuscated
+          path: Confused/SigmaPotato.exe
