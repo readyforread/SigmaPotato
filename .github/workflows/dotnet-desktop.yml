@@ -18,7 +18,7 @@ jobs:
           $src = Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Filter *.cs | Select-Object -ExpandProperty FullName
           Write-Host "Found $($src.Count) .cs files:"
           $src | ForEach-Object { Write-Host $_ }
-          & $csc.FullName /target:exe /out:SigmaPotato.exe $src
+          & $csc.FullName /target:exe /out:SigmaPotato.exe /platform:anycpu $src
 
       - name: Verify SigmaPotato.exe
         shell: pwsh
@@ -41,15 +41,11 @@ jobs:
         run: |
           @"
           <project outputDir="Confused" baseDir="." xmlns="http://confuser.codeplex.com">
-            <rule pattern="true" preset="maximum" inherit="false">
-              <protection id="anti debug" />
-              <protection id="anti dump" />
-              <protection id="anti ildasm" />
-              <protection id="anti tamper" />
-              <protection id="constants" />
-              <protection id="ctrl flow" />
-              <protection id="ref proxy" />
+            <rule pattern="true" preset="normal" inherit="false">
               <protection id="rename" />
+              <protection id="ctrl flow" />
+              <protection id="constants" />
+              <protection id="ref proxy" />
             </rule>
             <module path="SigmaPotato.exe" />
           </project>
